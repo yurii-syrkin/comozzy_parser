@@ -1,11 +1,19 @@
 from time import sleep
 import xlwt
 from selenium import webdriver
+
+from etc import get_price
 from settings import SYTE_COMOZZY, LOGIN, PASSWORD
 from selenium.webdriver.common.by import By
 import re
 import xlrd
 import random
+from save_data_to_ms_sql import get_session
+from save_data_to_ms_sql import save_data
+from datetime import datetime
+from save_data_to_ms_sql import Nomenclature as Nomenclature_in_database
+from save_data_to_ms_sql import Prices as Prices_in_database
+
 
 class Syte():
     def __init__(self):
@@ -163,40 +171,64 @@ class Nomenclature():
             self.syte.clear_order_list()
             break
 
+def data_already_in_database(session, name, article):
+    q = session.query(Nomenclature_in_database).filter_by(article=article)
+    finded_nomenclature = q.first()
+    if finded_nomenclature == None:
+        return False
+    nomenclature_in_database_id = finded_nomenclature.id
+    price_info = get_price(nomenclature_in_database_id,datetime.now(), session, True)
+    if price_info == None:
+        return False
+    else:
+        period = price_info['period']
+        if (datetime.now() - period).days > 180:
+            return False
+        else:
+            return True
+
 def perform_crawler():
     syte = Syte()
     # nomenclature = Nomenclature(syte=syte.syte, name='V3MH-316-PP-025')
-    workbook = xlrd.open_workbook('Цены Камоци Пневмоприводы.xls')
+    workbook = xlrd.open_workbook('Номенклатура Cammozy.xls')
     sheet = workbook.sheet_by_index(0)
-    new_workbook = xlwt.Workbook()
-    sheet_new_workbook = new_workbook.add_sheet('TDSheet')
-
+    #new_workbook = xlwt.Workbook()
+    #sheet_new_workbook = new_workbook.add_sheet('TDSheet')
+    session = get_session()
     sheet = workbook.sheet_by_index(0)
 
     for rownum in range(sheet.nrows):
         values = sheet.row_values(rownum)
-        sheet_new_workbook.write(rownum, 0, values[0])
-        sheet_new_workbook.write(rownum, 1, values[1])
-        sheet_new_workbook.write(rownum, 2, values[2])
-        sheet_new_workbook.write(rownum, 3, values[3])
-        sheet_new_workbook.write(rownum, 4, values[4])
-        sheet_new_workbook.write(rownum, 5, values[5])
+        # sheet_new_workbook.write(rownum, 0, values[0])
+        # sheet_new_workbook.write(rownum, 1, values[1])
+        # sheet_new_workbook.write(rownum, 2, values[2])
+        # sheet_new_workbook.write(rownum, 3, values[3])
+        # sheet_new_workbook.write(rownum, 4, values[4])
+        # sheet_new_workbook.write(rownum, 5, values[5])
         if rownum == 0:
-            sheet_new_workbook.write(rownum, 6, values[6])
-            sheet_new_workbook.write(rownum, 7, 'Масса')
+            continue
+            # sheet_new_workbook.write(rownum, 6, values[6])
+            # sheet_new_workbook.write(rownum, 7, 'Масса')
             #sheet_new_workbook.write(rownum, 8, 'Комментарий')
         else:
             sleep(random.randrange(1, 10))
-            name = values[3]
-            article = values[4]
+            name = values[1]
+            article = values[0]
+
+            if data_already_in_database(session, name, article):
+                continue
+
             nomenclature = Nomenclature(syte=syte, name=name, article=article)
             nomenclature.identify_indicators()
+
             if nomenclature.status == 'Ok':
-                sheet_new_workbook.write(rownum, 6, nomenclature.price)
-                if not nomenclature.weight is None:
-                    sheet_new_workbook.write(rownum, 7, nomenclature.weight)
+                save_data(session,nomenclature.article, nomenclature.name, nomenclature.weight,
+                          nomenclature.price, datetime.now())
+                #sheet_new_workbook.write(rownum, 6, nomenclature.price)
+                #if not nomenclature.weight is None:
+                    #sheet_new_workbook.write(rownum, 7, nomenclature.weight)
             #sheet_new_workbook.write(rownum, 8, nomenclature.comment)
-        new_workbook.save('Цены Камоци Пневмоприводы (скаченные с сайта).xls')
+        #new_workbook.save('Цены Камоци Пневмоприводы (скаченные с сайта).xls')
         # if rownum > 20:
         #     break
 
