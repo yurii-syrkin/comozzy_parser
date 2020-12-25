@@ -1,4 +1,4 @@
-from time import sleep
+﻿from time import sleep
 import xlwt
 from selenium import webdriver
 
@@ -8,18 +8,18 @@ from selenium.webdriver.common.by import By
 import re
 import xlrd
 import random
-from save_data_to_ms_sql import get_session
+from save_data_to_ms_sql import get_session, Program_execution_status
 from save_data_to_ms_sql import save_data
 from datetime import datetime
 from save_data_to_ms_sql import Nomenclature as Nomenclature_in_database
-from save_data_to_ms_sql import Prices as Prices_in_database
+import argparse
 
 
 class Syte():
     def __init__(self):
-        chromedriver = 'E:\Distrib\Browsers\chromedriver_win32\chromedriver.exe'
+        chromedriver = 'C:\install\chromedriver_win32\chromedriver.exe'
         options = webdriver.ChromeOptions()
-        # options.add_argument('headless')  # для открытия headless-браузера
+        options.add_argument('headless')  # для открытия headless-браузера
         browser = webdriver.Chrome(executable_path=chromedriver, chrome_options=options)
         browser.maximize_window()
 
@@ -83,11 +83,11 @@ class Nomenclature():
     def __str__(self):
         return f'{self.article} ({self.name})'
 
-    def identify_indicators(self, key_for_search = None):
+    def identify_indicators(self, key_for_search=None, w=True):
         if key_for_search == None:
             self.identify_indicators(self.article)
             if self.status != 'Ok':
-                sleep(random.randrange(2,6))
+                sleep(random.randrange(2, 6))
                 self.identify_indicators(self.name)
             return
 
@@ -118,6 +118,10 @@ class Nomenclature():
             price = price.replace(',', '.')
             if price.replace('.', '').isdigit():
                 self.price = float(price)
+
+            if w == False:
+                continue
+
             for i in range(10):
                 botton_order_1 = children_elements[10].find_element(By.TAG_NAME, 'a')
                 botton_order_1.click()
@@ -135,8 +139,10 @@ class Nomenclature():
                     except BaseException as exc:
                         continue
                     for g in range(20):
-                        cmarket_cart_table = self.syte.syte.find_elements(By.CLASS_NAME, 'cmarket_cart_item.row.stock_available')
-                        cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME, 'cmarket_cart_item.row.stock_expect.stock_order')
+                        cmarket_cart_table = self.syte.syte.find_elements(By.CLASS_NAME,
+                                                                    'cmarket_cart_item.row.stock_available')
+                        cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME,
+                                                                    'cmarket_cart_item.row.stock_expect.stock_order')
                         cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME, 'cmarket_cart_item.row.stock_expect')
                         if len(cmarket_cart_table) == 0:
                             continue
@@ -171,7 +177,7 @@ class Nomenclature():
             self.syte.clear_order_list()
             break
 
-def data_already_in_database(session, name, article):
+def data_already_in_database(session, name, article, m):
     q = session.query(Nomenclature_in_database).filter_by(article=article)
     finded_nomenclature = q.first()
     if finded_nomenclature == None:
@@ -181,58 +187,62 @@ def data_already_in_database(session, name, article):
     if price_info == None:
         return False
     else:
-        period = price_info['period']
-        if (datetime.now() - period).days > 180:
-            return False
-        else:
+        period = price_info[1]
+        if (datetime.now() - period).days <= m:
             return True
+        else:
+            return False
 
-def perform_crawler():
-    syte = Syte()
-    # nomenclature = Nomenclature(syte=syte.syte, name='V3MH-316-PP-025')
-    workbook = xlrd.open_workbook('Номенклатура Cammozy.xls')
-    sheet = workbook.sheet_by_index(0)
-    #new_workbook = xlwt.Workbook()
-    #sheet_new_workbook = new_workbook.add_sheet('TDSheet')
+def perform_crawler(file, w, m):
     session = get_session()
+    program_execution_status = Program_execution_status(start_of_the_program=datetime.now(),
+                                                        program_execution_status='Начало выполнения')
+    session.add(program_execution_status)
+    session.commit()
+
+    syte = Syte()
+    program_execution_status.program_execution_status = 'Выполнен вход на сайт'
+    program_execution_status.time_of_the_last_transaction = datetime.now()
+    session.add(program_execution_status)
+    session.commit()
+
+    workbook = xlrd.open_workbook(file)
     sheet = workbook.sheet_by_index(0)
 
     for rownum in range(sheet.nrows):
         values = sheet.row_values(rownum)
-        # sheet_new_workbook.write(rownum, 0, values[0])
-        # sheet_new_workbook.write(rownum, 1, values[1])
-        # sheet_new_workbook.write(rownum, 2, values[2])
-        # sheet_new_workbook.write(rownum, 3, values[3])
-        # sheet_new_workbook.write(rownum, 4, values[4])
-        # sheet_new_workbook.write(rownum, 5, values[5])
+        program_execution_status.program_execution_status = 'Выполняется обход сайта'
+        program_execution_status.time_of_the_last_transaction = datetime.now()
+        session.add(program_execution_status)
+        session.commit()
+
         if rownum == 0:
             continue
-            # sheet_new_workbook.write(rownum, 6, values[6])
-            # sheet_new_workbook.write(rownum, 7, 'Масса')
-            #sheet_new_workbook.write(rownum, 8, 'Комментарий')
         else:
-            sleep(random.randrange(1, 10))
-            name = values[1]
-            article = values[0]
+            name = values[3]
+            article = values[4]
 
-            if data_already_in_database(session, name, article):
+            if data_already_in_database(session, name, article, m):
                 continue
 
+            sleep(random.randrange(1, 10))
+
             nomenclature = Nomenclature(syte=syte, name=name, article=article)
-            nomenclature.identify_indicators()
+            nomenclature.identify_indicators(w=w)
 
             if nomenclature.status == 'Ok':
-                save_data(session,nomenclature.article, nomenclature.name, nomenclature.weight,
+                save_data(session, nomenclature.article, nomenclature.name, nomenclature.weight,
                           nomenclature.price, datetime.now())
-                #sheet_new_workbook.write(rownum, 6, nomenclature.price)
-                #if not nomenclature.weight is None:
-                    #sheet_new_workbook.write(rownum, 7, nomenclature.weight)
-            #sheet_new_workbook.write(rownum, 8, nomenclature.comment)
-        #new_workbook.save('Цены Камоци Пневмоприводы (скаченные с сайта).xls')
-        # if rownum > 20:
-        #     break
 
     syte.quit()
+
+    values = sheet.row_values(rownum)
+
+    program_execution_status.program_execution_status = 'Обход сайта завершён'
+    program_execution_status.time_of_the_last_transaction = datetime.now()
+    program_execution_status.end_of_program_execution = datetime.now()
+    session.add(program_execution_status)
+    session.commit()
 
 def test():
     syte = Syte()
@@ -241,8 +251,16 @@ def test():
     print(f'Номенклатура: {str(nomenclature)}, цена {nomenclature.price}, масса {nomenclature.weight}')
 
 if __name__ == '__main__':
-    perform_crawler()
-    #test()
+    #'Номенклатура Cammozy.xls'
+    parser = argparse.ArgumentParser(description='Great Description To Be Here')
+    parser.add_argument('file', type=str, help='Файл exl')
+    parser.add_argument('w', type=bool, help='Запрашивать данные по массе. True- запрашивать, False- не запрашивать')
+    parser.add_argument('m', type=int, help='Если 0 тогда запрашиваем данные с сайта. В другом случае количество дней'
+                                            'периода, в рамках которого необходимо проверять наличие цены')
+
+    args = parser.parse_args()
+    perform_crawler(args.file, args.w, args.m)
+
 
 
 

@@ -1,15 +1,15 @@
 
-from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, ForeignKey, VARCHAR
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, scoped_session
 from sqlalchemy.orm.session import sessionmaker
 import datetime
 
 driver = 'SQL Server Native Client 11.0'
-server = 'Tyson'
-database = 'camozzy_parser'
+server = 'SERVER4'
+database = 'camozzy_prices'
 user = 'sa'
-password = 'Syrkin_YV1983'
+password = 'Aradmin!'
 
 engine = create_engine(f'mssql://{user}:{password}@{server}/{database}?driver={driver}')
 #mssql://sa:Syrkin_YV1983@Tyson/camozzy_parser?driver=SQL Server Native Client 11.0
@@ -37,6 +37,16 @@ class Prices(base):
 
     def __repr__(self):
         return f'<Price {self.period} {self.price}>'
+
+
+class Program_execution_status(base):
+    __tablename__ = 'Program_execution_status'
+    id = Column(Integer, primary_key=True)
+    start_of_the_program = Column(DateTime)
+    end_of_program_execution = Column(DateTime)
+    time_of_the_last_transaction = Column(DateTime)
+    program_execution_status = Column(VARCHAR(50))
+
 
 def get_session():
     return scoped_session(sessionmaker(bind=engine))
