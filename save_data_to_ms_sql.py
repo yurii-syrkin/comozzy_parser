@@ -3,15 +3,10 @@ from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, scoped_session
 from sqlalchemy.orm.session import sessionmaker
-import datetime
+from datetime import datetime
+from settings import USER_OF_DB, PASSWORD_OF_DB, SERVER, DATABASE, DRIVER
 
-driver = 'SQL Server Native Client 11.0'
-server = 'SERVER4'
-database = 'camozzy_prices'
-user = 'sa'
-password = 'Aradmin!'
-
-engine = create_engine(f'mssql://{user}:{password}@{server}/{database}?driver={driver}')
+engine = create_engine(f'mssql://{USER_OF_DB}:{PASSWORD_OF_DB}@{SERVER}/{DATABASE}?driver={DRIVER}')
 #mssql://sa:Syrkin_YV1983@Tyson/camozzy_parser?driver=SQL Server Native Client 11.0
 
 
@@ -38,18 +33,41 @@ class Prices(base):
     def __repr__(self):
         return f'<Price {self.period} {self.price}>'
 
-
 class Program_execution_status(base):
     __tablename__ = 'Program_execution_status'
     id = Column(Integer, primary_key=True)
-    start_of_the_program = Column(DateTime)
-    end_of_program_execution = Column(DateTime)
-    time_of_the_last_transaction = Column(DateTime)
+    time = Column(DateTime)
     program_execution_status = Column(VARCHAR(50))
-
+    comments = Column(VARCHAR(150))
 
 def get_session():
     return scoped_session(sessionmaker(bind=engine))
+
+def get_price(nomenclature_id, date, session = None, all_data = False):
+    if session == None:
+        session = get_session()
+
+    price_info = session.query(Prices).filter_by(nomenclature_id=nomenclature_id)
+    price_dict = {}
+    for str_price_info in price_info:
+        period = str_price_info.period
+        if period > date:
+            continue
+        if not 'period' in price_dict.keys() or period > price_dict['period']:
+            price_dict['period'] = period
+            price_dict['price'] = str_price_info.price
+        else:
+            continue
+
+    if len(price_dict) == 0:
+        if all_data == True:
+            return None
+        else:
+            return 0
+    elif all_data == True:
+        return price_dict['price'], price_dict['period']
+    else:
+        return price_dict['price']
 
 def save_data(session, article, name, weight, price, date):
 
@@ -62,6 +80,15 @@ def save_data(session, article, name, weight, price, date):
         nomenclature_id = nomenclature.id
     else:
         nomenclature_id = finded_nomenclature.id
+        if type(weight) == int and weight > 0:
+            finded_nomenclature.weight = weight
+            session.add(finded_nomenclature)
+            session.commit()
+
+    finded_price = get_price(nomenclature_id, datetime.now(), session=session, all_data=False)
+
+    if finded_price == price:
+        return
 
     price_data = Prices(period=date, nomenclature_id=nomenclature_id, price=price)
 
@@ -69,12 +96,6 @@ def save_data(session, article, name, weight, price, date):
     session.commit()
 
 base.metadata.create_all(engine)
-
-##### testing
-
-# session = get_session()
-# save_data(session, '15651', 'ad;flkaf', 15.5, datetime.datetime.now())
-
 
 
 

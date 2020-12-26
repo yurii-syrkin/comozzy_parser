@@ -1,8 +1,7 @@
 ﻿from time import sleep
-import xlwt
 from selenium import webdriver
 
-from etc import get_price
+from save_data_to_ms_sql import get_price
 from settings import SYTE_COMOZZY, LOGIN, PASSWORD
 from selenium.webdriver.common.by import By
 import re
@@ -13,14 +12,18 @@ from save_data_to_ms_sql import save_data
 from datetime import datetime
 from save_data_to_ms_sql import Nomenclature as Nomenclature_in_database
 import argparse
+import logging
 
+
+logging.basicConfig(filename='log.log', level=logging.DEBUG)
 
 class Syte():
     def __init__(self):
-        chromedriver = 'C:\install\chromedriver_win32\chromedriver.exe'
+        chromedriver = 'C:\Python\comozzy_parser\chromedriver.exe'
         options = webdriver.ChromeOptions()
         options.add_argument('headless')  # для открытия headless-браузера
         browser = webdriver.Chrome(executable_path=chromedriver, chrome_options=options)
+        browser.set_window_size(1920, 1080)
         browser.maximize_window()
 
         browser.get(SYTE_COMOZZY)
@@ -95,14 +98,25 @@ class Nomenclature():
         input_search.clear()
         input_search.send_keys(key_for_search)
         button_search = self.syte.syte.find_element_by_id('headsearchsubmit')
-        button_search.click()
+        for i in range(10):
+            try:
+                button_search.click()
+                break
+            except BaseException as exc:
+                logging.info(f'Не удалось нажать на кнопку поиска. Попытка {i}. Ошибка {exc}')
+                sleep(10)
         table_strings = self.syte.syte.find_elements(By.CLASS_NAME, 'stock_available')
         table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_expect')
         if len(table_strings) == 0:
-            i = 1
             for i in range(10):
                 button_search = self.syte.syte.find_element_by_id('headsearchsubmit')
-                button_search.click()
+                for a in range(10):
+                    try:
+                        button_search.click()
+                        break
+                    except BaseException as exc:
+                        logging.info(f'Не удалось нажать на headsearchsubmit. Попытка {a}. Ошибка {exc}')
+                        sleep(10)
                 table_strings = self.syte.syte.find_elements(By.CLASS_NAME, 'stock_available')
                 table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_expect')
                 if len(table_strings) > 0:
@@ -122,9 +136,17 @@ class Nomenclature():
             if w == False:
                 continue
 
-            for i in range(10):
+            for i in range(11):
                 botton_order_1 = children_elements[10].find_element(By.TAG_NAME, 'a')
-                botton_order_1.click()
+                for k in range(11):
+                    sleep(10)
+                    try:
+                        botton_order_1.click()
+                        break
+                    except BaseException as exc:
+                        logging.debug(f'Не удалось нажать на кнопку корзинки. Попытка {k}. Ошибка {exc}')
+                if k == 10:
+                    continue
                 form_order = self.syte.syte.find_elements(By.CLASS_NAME, 'popupbody')
                 if len(form_order) == 0:
                     sleep(5)
@@ -137,6 +159,7 @@ class Nomenclature():
                     try:
                         botton_order_2[0].click()
                     except BaseException as exc:
+                        logging.info(f'Не удалось нажать на imgsubmit. Попытка {j}. Ошибка {exc}')
                         continue
                     for g in range(20):
                         cmarket_cart_table = self.syte.syte.find_elements(By.CLASS_NAME,
@@ -177,52 +200,79 @@ class Nomenclature():
             self.syte.clear_order_list()
             break
 
-def data_already_in_database(session, name, article, m):
+def data_already_in_database(session, program_execution_status, name, article, m):
     q = session.query(Nomenclature_in_database).filter_by(article=article)
     finded_nomenclature = q.first()
     if finded_nomenclature == None:
+        program_execution_status.program_execution_status = 'Выполняется обход сайта'
+        program_execution_status.time = datetime.now()
+        program_execution_status.comments = f'Данные по артикул {article} , наименование {name} отсутствуют. Будем грузить'
+        session.add(program_execution_status)
+        session.commit()
         return False
     nomenclature_in_database_id = finded_nomenclature.id
     price_info = get_price(nomenclature_in_database_id,datetime.now(), session, True)
     if price_info == None:
+        program_execution_status.program_execution_status = 'Выполняется обход сайта'
+        program_execution_status.time = datetime.now()
+        program_execution_status.comments = f'Данные по цене артикул {article} , наименование {name} отсутствуют. Будем грузить'
+        session.add(program_execution_status)
+        session.commit()
         return False
     else:
         period = price_info[1]
         if (datetime.now() - period).days <= m:
+            program_execution_status.program_execution_status = 'Выполняется обход сайта'
+            program_execution_status.time = datetime.now()
+            program_execution_status.comments = f'Данные в базе найдены {article} , наименование {name} отсутствуют. Грузить не будем'
+            session.add(program_execution_status)
+            session.commit()
             return True
         else:
+            program_execution_status.program_execution_status = 'Выполняется обход сайта'
+            program_execution_status.time = datetime.now()
+            program_execution_status.comments = f'Данные в базе есть {article} , наименование {name}, но старые. Будем грузить'
+            session.add(program_execution_status)
+            session.commit()
             return False
 
 def perform_crawler(file, w, m):
     session = get_session()
-    program_execution_status = Program_execution_status(start_of_the_program=datetime.now(),
+    program_execution_status = Program_execution_status(time=datetime.now(),
                                                         program_execution_status='Начало выполнения')
     session.add(program_execution_status)
     session.commit()
 
     syte = Syte()
-    program_execution_status.program_execution_status = 'Выполнен вход на сайт'
-    program_execution_status.time_of_the_last_transaction = datetime.now()
+
+    program_execution_status = Program_execution_status(time=datetime.now(),
+                                                        program_execution_status='Выполнен вход на сайт')
     session.add(program_execution_status)
     session.commit()
 
     workbook = xlrd.open_workbook(file)
     sheet = workbook.sheet_by_index(0)
 
+    program_execution_status = Program_execution_status(time=datetime.now(),
+                                                        program_execution_status='Приступаю к выполнению обхода')
+    session.add(program_execution_status)
+    session.commit()
     for rownum in range(sheet.nrows):
         values = sheet.row_values(rownum)
-        program_execution_status.program_execution_status = 'Выполняется обход сайта'
-        program_execution_status.time_of_the_last_transaction = datetime.now()
-        session.add(program_execution_status)
-        session.commit()
 
         if rownum == 0:
             continue
         else:
-            name = values[3]
-            article = values[4]
+            name = values[0]
+            article = values[1]
 
-            if data_already_in_database(session, name, article, m):
+            program_execution_status.program_execution_status = 'Выполняется обход сайта'
+            program_execution_status.time = datetime.now()
+            program_execution_status.comments = f'Начало поиска данных по позиции: артикул {article} , наименование {name}'
+            session.add(program_execution_status)
+            session.commit()
+
+            if data_already_in_database(session, program_execution_status, name, article, m):
                 continue
 
             sleep(random.randrange(1, 10))
@@ -230,17 +280,14 @@ def perform_crawler(file, w, m):
             nomenclature = Nomenclature(syte=syte, name=name, article=article)
             nomenclature.identify_indicators(w=w)
 
-            if nomenclature.status == 'Ok':
+        if nomenclature.status == 'Ok':
                 save_data(session, nomenclature.article, nomenclature.name, nomenclature.weight,
                           nomenclature.price, datetime.now())
 
     syte.quit()
 
-    values = sheet.row_values(rownum)
-
-    program_execution_status.program_execution_status = 'Обход сайта завершён'
-    program_execution_status.time_of_the_last_transaction = datetime.now()
-    program_execution_status.end_of_program_execution = datetime.now()
+    program_execution_status = Program_execution_status(time=datetime.now(),
+                                                        program_execution_status='Обход сайта завершён')
     session.add(program_execution_status)
     session.commit()
 

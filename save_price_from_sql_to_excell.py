@@ -1,4 +1,4 @@
-from etc import get_price
+from save_data_to_ms_sql import get_price
 from save_data_to_ms_sql import get_session, Nomenclature
 import xlwt
 from datetime import datetime
