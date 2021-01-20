@@ -123,6 +123,10 @@ class Nomenclature():
                     break
                 sleep(10)
 
+        if len(table_strings) == 0:
+            self.status = 'all bad'
+            return
+
         for table_str in table_strings:
             children_elements = table_str.find_elements(By.TAG_NAME, 'div')
             regex = fr'^{key_for_search}$'
