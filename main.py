@@ -1,7 +1,7 @@
 ﻿from time import sleep
 from selenium import webdriver
 
-from save_data_to_ms_sql import get_price
+from save_data_to_ms_sql import get_price, enter_data_about_the_download_error
 from settings import SYTE_COMOZZY, LOGIN, PASSWORD
 from selenium.webdriver.common.by import By
 import re
@@ -18,10 +18,11 @@ import logging
 logging.basicConfig(filename='log.log', level=logging.DEBUG)
 
 class Syte():
-    def __init__(self):
+    def __init__(self, show_browser=True):
         chromedriver = 'C:\Python\comozzy_parser\chromedriver.exe'
         options = webdriver.ChromeOptions()
-        options.add_argument('headless')  # для открытия headless-браузера
+        if show_browser:
+            options.add_argument('headless')  # для открытия headless-браузера
         browser = webdriver.Chrome(executable_path=chromedriver, chrome_options=options)
         browser.set_window_size(1920, 1080)
         browser.maximize_window()
@@ -116,9 +117,12 @@ class Nomenclature():
                         break
                     except BaseException as exc:
                         logging.info(f'Не удалось нажать на headsearchsubmit. Попытка {a}. Ошибка {exc}')
+                        self.comment = f'Не удалось нажать на headsearchsubmit. Попытка {a}. Ошибка {exc}'
                         sleep(10)
                 table_strings = self.syte.syte.find_elements(By.CLASS_NAME, 'stock_available')
                 table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_expect')
+                table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_order')
+
                 if len(table_strings) > 0:
                     break
                 sleep(10)
@@ -130,7 +134,7 @@ class Nomenclature():
         for table_str in table_strings:
             children_elements = table_str.find_elements(By.TAG_NAME, 'div')
             regex = fr'^{key_for_search}$'
-            if re.match(regex, children_elements[2].text) is None:
+            if re.match(regex, children_elements[2].text) is None and key_for_search.upper() != children_elements[2].text.upper():
                 continue
             price = children_elements[9].text
             price = price.replace(',', '.')
@@ -149,6 +153,7 @@ class Nomenclature():
                         break
                     except BaseException as exc:
                         logging.debug(f'Не удалось нажать на кнопку корзинки. Попытка {k}. Ошибка {exc}')
+                        self.comment = f'Не удалось нажать на кнопку корзинки. Попытка {k}. Ошибка {exc}'
                 if k == 10:
                     continue
                 form_order = self.syte.syte.find_elements(By.CLASS_NAME, 'popupbody')
@@ -164,13 +169,17 @@ class Nomenclature():
                         botton_order_2[0].click()
                     except BaseException as exc:
                         logging.info(f'Не удалось нажать на imgsubmit. Попытка {j}. Ошибка {exc}')
+                        self.comment = f'Не удалось нажать на imgsubmit. Попытка {j}. Ошибка {exc}'
                         continue
                     for g in range(20):
                         cmarket_cart_table = self.syte.syte.find_elements(By.CLASS_NAME,
                                                                     'cmarket_cart_item.row.stock_available')
                         cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME,
                                                                     'cmarket_cart_item.row.stock_expect.stock_order')
-                        cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME, 'cmarket_cart_item.row.stock_expect')
+                        cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME,
+                                                                    'cmarket_cart_item.row.stock_expect')
+                        cmarket_cart_table = cmarket_cart_table + self.syte.syte.find_elements(By.CLASS_NAME,
+                                                                    'cmarket_cart_item.row.stock_order')
                         if len(cmarket_cart_table) == 0:
                             continue
                         for cmarket_cart_table_str in cmarket_cart_table:
@@ -179,7 +188,7 @@ class Nomenclature():
                             if len(cmarket_cart_item_code) == 0:
                                 continue
                             nom_name = cmarket_cart_item_code[0].text
-                            if re.match(regex, nom_name) is None:
+                            if re.match(regex, nom_name) is None and key_for_search.upper() != nom_name.upper():
                                 continue
                             cmarket_cart_mass = cmarket_cart_table_str.find_elements(By.CLASS_NAME,
                                 'cmarket_cart_sum_container.cmarket_cart_jnote.cmarket_cart_mulqty.cmarket_cart_mass')
@@ -287,6 +296,8 @@ def perform_crawler(file, w, m):
         if nomenclature.status == 'Ok':
                 save_data(session, nomenclature.article, nomenclature.name, nomenclature.weight,
                           nomenclature.price, datetime.now())
+        else:
+            enter_data_about_the_download_error(session, nomenclature.article, nomenclature.name, nomenclature.comment)
 
     syte.quit()
 
@@ -294,12 +305,6 @@ def perform_crawler(file, w, m):
                                                         program_execution_status='Обход сайта завершён')
     session.add(program_execution_status)
     session.commit()
-
-def test():
-    syte = Syte()
-    nomenclature = Nomenclature(syte=syte, name='S6500 12-1/4', article='S6500 12-1/4')
-    nomenclature.identify_indicators()
-    print(f'Номенклатура: {str(nomenclature)}, цена {nomenclature.price}, масса {nomenclature.weight}')
 
 if __name__ == '__main__':
     #'Номенклатура Cammozy.xls'

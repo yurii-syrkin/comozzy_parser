@@ -33,6 +33,13 @@ class Prices(base):
     def __repr__(self):
         return f'<Price {self.period} {self.price}>'
 
+class Data_loading_errors(base):
+    __tablename__ = 'Data_loading_errors'
+    id = Column(Integer, primary_key=True)
+    nomenclature_id = Column(Integer, ForeignKey('Nomenclature.id'))
+    period = Column(DateTime)
+    comment = Column(String)
+
 class Program_execution_status(base):
     __tablename__ = 'Program_execution_status'
     id = Column(Integer, primary_key=True)
@@ -93,6 +100,21 @@ def save_data(session, article, name, weight, price, date):
     price_data = Prices(period=date, nomenclature_id=nomenclature_id, price=price)
 
     session.add(price_data)
+    session.commit()
+
+def enter_data_about_the_download_error(session, article, name, comment):
+    q = session.query(Nomenclature).filter_by(article=article)
+    finded_nomenclature = q.first()
+    if finded_nomenclature == None:
+        nomenclature = Nomenclature(article=article, name=name)
+        session.add(nomenclature)
+        session.commit()
+        nomenclature_id = nomenclature.id
+    else:
+        nomenclature_id = finded_nomenclature.id
+
+    data_loading_errors = Data_loading_errors(nomenclature_id=nomenclature_id, period=datetime.now(), comment=comment)
+    session.add(data_loading_errors)
     session.commit()
 
 base.metadata.create_all(engine)
