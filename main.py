@@ -108,6 +108,7 @@ class Nomenclature():
                 sleep(10)
         table_strings = self.syte.syte.find_elements(By.CLASS_NAME, 'stock_available')
         table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_expect')
+        table_strings = table_strings + self.syte.syte.find_elements(By.CLASS_NAME, 'stock_order')
         if len(table_strings) == 0:
             for i in range(10):
                 button_search = self.syte.syte.find_element_by_id('headsearchsubmit')
@@ -188,7 +189,7 @@ class Nomenclature():
                             if len(cmarket_cart_item_code) == 0:
                                 continue
                             nom_name = cmarket_cart_item_code[0].text
-                            if re.match(regex, nom_name) is None and key_for_search.upper() != nom_name.upper():
+                            if re.match(regex, nom_name) is None and key_for_search.upper() != children_elements[2].text.upper():
                                 continue
                             cmarket_cart_mass = cmarket_cart_table_str.find_elements(By.CLASS_NAME,
                                 'cmarket_cart_sum_container.cmarket_cart_jnote.cmarket_cart_mulqty.cmarket_cart_mass')
