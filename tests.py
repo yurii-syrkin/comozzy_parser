@@ -34,7 +34,7 @@ from main import Nomenclature
 
 def test_1():
     syte = Syte(False)
-    nomenclature = Nomenclature(syte=syte, name='2033 1', article='2033 1')
+    nomenclature = Nomenclature(syte=syte, name='6708 6', article='6708 6')
     nomenclature.identify_indicators()
     print(f'Номенклатура: {str(nomenclature)}, цена {nomenclature.price}, масса {nomenclature.weight}')
 

@@ -87,7 +87,7 @@ def save_data(session, article, name, weight, price, date):
         nomenclature_id = nomenclature.id
     else:
         nomenclature_id = finded_nomenclature.id
-        if type(weight) == int and weight > 0:
+        if (type(weight) == int or type(weight) == float) and weight > 0:
             finded_nomenclature.weight = weight
             session.add(finded_nomenclature)
             session.commit()

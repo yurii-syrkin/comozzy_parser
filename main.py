@@ -215,6 +215,9 @@ class Nomenclature():
             break
 
 def data_already_in_database(session, program_execution_status, name, article, m):
+    if m == 0:
+        return False
+
     q = session.query(Nomenclature_in_database).filter_by(article=article)
     finded_nomenclature = q.first()
     if finded_nomenclature == None:
